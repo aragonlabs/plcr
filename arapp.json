@@ -1,0 +1,8 @@
+{
+    "appName": "plcr.aragonpm.eth",
+    "version": "1.0.0",
+    "roles": [
+      { "name": "Create Vote", "id": "CREATE_VOTE_ROLE", "params": [] }
+    ],
+    "path": "contracts/PLCR.sol"
+}

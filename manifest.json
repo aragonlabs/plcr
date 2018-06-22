@@ -1,0 +1,8 @@
+{
+  "name": "PLCR",
+  "description": "Voting (Partial Lock Commit Reveal) component for the TCR stack",
+  "icons": [{
+    "src": "images/icon.png",
+    "sizes": "192x192"
+  }]
+}
