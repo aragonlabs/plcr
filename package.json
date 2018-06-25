@@ -2,7 +2,7 @@
   "name": "@aragon/apps-plcr",
   "version": "1.0.0",
   "description": "PLCR App for Aragon TCR",
-  "main": "index.js",
+  "main": "truffle.js",
   "scripts": {
     "compile": "truffle compile",
     "lint": "solium --dir ./contracts",

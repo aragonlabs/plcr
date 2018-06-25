@@ -1,6 +1,6 @@
 pragma solidity 0.4.18;
 
-import "../../contracts/interfaces/IStaking.sol";
+import "@aragon/apps-staking/contracts/interfaces/IStaking.sol";
 
 
 contract StakingMock is IStaking {
@@ -25,7 +25,7 @@ contract StakingMock is IStaking {
         Unlock(_acct, _lockId);
     }
 
-    function moveTokens(address _from, address _to, uint256 _amount) {
+    function moveTokens(address _from, address _to, uint256 _amount) public {
         MovedTokens(_from, _to, _amount);
     }
 

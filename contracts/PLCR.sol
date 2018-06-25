@@ -5,8 +5,8 @@ import "@aragon/os/contracts/lib/misc/Migrations.sol";
 import "@aragon/os/contracts/lib/zeppelin/math/SafeMath.sol";
 import "@aragon/os/contracts/lib/zeppelin/math/SafeMath64.sol";
 
-import "./interfaces/IStaking.sol"; // TODO: unifiy with Curation somewhere
-import "./interfaces/IVoting.sol"; // TODO: unifiy with Curation somewhere
+import "@aragon/apps-staking/contracts/interfaces/IStaking.sol"; // TODO: unifiy with Curation somewhere
+import "@aragon/apps-curation/contracts/interfaces/IVoting.sol"; // TODO: unifiy with Curation somewhere
 
 
 contract PLCR is AragonApp, IVoting {
