@@ -51,7 +51,7 @@ contract PLCR is AragonApp, IVoting {
 
     Vote[] votes;
 
-    mapping(uint256 => bool) usedLocks;
+    mapping(address => mapping(uint256 => bool)) usedLocks;
 
     event NewVote(uint256 voteId);
     event CommitedVote(uint256 voteId, address voter, bytes32 secretHash);
@@ -100,7 +100,7 @@ contract PLCR is AragonApp, IVoting {
         require(getTimestamp() <= vote.commitEndDate);
 
         // check lock and get amount
-        uint256 stake = checkLock(_lockId, vote.revealEndDate);
+        uint256 stake = checkLock(msg.sender, _lockId, vote.revealEndDate);
 
         // move slash proportion to here
         uint256 slashStake = stake.mul(minorityBlocSlash) / PCT_BASE;
@@ -276,9 +276,12 @@ contract PLCR is AragonApp, IVoting {
         return 0;
     }
 
-    function checkLock(uint256 _lockId, uint64 _date) internal returns (uint256) {
+    function checkLock(address user, uint256 _lockId, uint64 _date) internal returns (uint256) {
         // check lockId was not used before
-        require(!usedLocks[_lockId]);
+        require(!usedLocks[user][_lockId]);
+        // mark it as used
+        usedLocks[user][_lockId] = true;
+
         // get the lock
         uint256 amount;
         uint8 lockUnit;
@@ -290,9 +293,6 @@ contract PLCR is AragonApp, IVoting {
         // check time
         require(lockUnit == uint8(TimeUnit.Seconds));
         require(lockEnds >= _date);
-
-        // mark it as used
-        usedLocks[_lockId] = true;
 
         return amount;
     }

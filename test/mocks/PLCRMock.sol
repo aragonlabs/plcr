@@ -26,7 +26,7 @@ contract PLCRMock is PLCR {
         return _mockTime;
     }
 
-    function getUsedLock(uint256 lockId) view public returns (bool) {
-        return usedLocks[lockId];
+    function getUsedLock(address user, uint256 lockId) view public returns (bool) {
+        return usedLocks[user][lockId];
     }
 }

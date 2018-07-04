@@ -231,7 +231,7 @@ contract('PLCR', ([owner, voter1, voter2, _]) => {
       await app.commitVote(voteId, secretHash(true), lockId, { from: voter1 })
 
       return assertRevert(async () => {
-        await app.commitVote(voteId, secretHash(true), lockId, { from: voter2 })
+        await app.commitVote(voteId, secretHash(true), lockId, { from: voter1 })
       })
     })
 
