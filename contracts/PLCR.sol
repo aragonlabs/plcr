@@ -243,7 +243,7 @@ contract PLCR is AragonApp, IVoting {
             return (false, 0, 0);
         }
 
-        Vote memory vote = votes[_voteId];
+        Vote storage vote = votes[_voteId];
 
         if (!vote.computed) {
             computeVote(_voteId);
