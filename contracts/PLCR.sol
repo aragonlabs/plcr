@@ -142,7 +142,13 @@ contract PLCR is AragonApp, IVoting {
             vote.votesAgainst = vote.votesAgainst.add(userVote.stake);
         }
 
-        RevealedVote(_voteId, msg.sender, _voteOption);
+        // unlock own tokens
+        staking.unlock(msg.sender, userVote.lockId);
+
+        // delete used lock
+        delete(usedLocks[msg.sender][userVote.lockId]);
+
+        RevealedVote(_voteId, msg.sender, userVote.stake, _voteOption);
     }
 
     function claimTokens(uint256 _voteId) isInitialized public {
@@ -159,9 +165,6 @@ contract PLCR is AragonApp, IVoting {
         if (!vote.computed) {
             computeVote(_voteId);
         }
-
-        // unlock own tokens
-        staking.unlock(msg.sender, userVote.lockId);
 
         // winning side
         if (userVote.revealed && userVote.voteOption == vote.result) {
