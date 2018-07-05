@@ -54,8 +54,8 @@ contract PLCR is AragonApp, IVoting {
     mapping(address => mapping(uint256 => bool)) usedLocks;
 
     event NewVote(uint256 voteId);
-    event CommitedVote(uint256 voteId, address voter, bytes32 secretHash);
-    event RevealedVote(uint256 indexed voteId, address voter, bool option);
+    event CommitedVote(uint256 voteId, address voter, uint256 stake, bytes32 secretHash);
+    event RevealedVote(uint256 indexed voteId, address voter, uint256 stake, bool option);
     event ClaimedTokens(uint256 indexed voteId, address voter);
 
     function initialize(
@@ -116,7 +116,7 @@ contract PLCR is AragonApp, IVoting {
             claimed: false
         });
 
-        CommitedVote(_voteId, msg.sender, _secretHash);
+        CommitedVote(_voteId, msg.sender, stake, _secretHash);
     }
 
     function revealVote(uint256 _voteId, bool _voteOption, bytes32 _salt) isInitialized public {
