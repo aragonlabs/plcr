@@ -58,6 +58,14 @@ contract PLCR is AragonApp, IVoting {
     event RevealedVote(uint256 indexed voteId, address voter, uint256 stake, bool option);
     event ClaimedTokens(uint256 indexed voteId, address voter);
 
+    /**
+     * @notice Initialize App with Staking app at `_staking`, needed quorum of `(_voteQuorum - _voteQuorum % 10^16) / 10^14`, minority bloc slash of `(_minorityBlocSlash - _minorityBlocSlash % 10^16) / 10^14`, commit duration of `(_commitDuration - _commitDuration % 86400) / 86400` day `_commitDuration >= 172800 ? 's' : ''` and reveal duration of `(_revealDuration - _revealDuration % 86400) / 86400` day `_revealDuration >= 172800 ? 's' : ''`
+     * @param _staking Address of app used for staking and locking tokens
+     * @param _voteQuorum Percentage of cast votes needed to pass a Vote
+     * @param _minorityBlocSlash Percentage of tokens used for voting that will be redistributed from the losing side to the winning one
+     * @param _commitDuration Duration in seconds of the Commit period
+     * @param _revealDuration Duration in seconds of the Reveal period
+     */
     function initialize(
         IStaking _staking,
         uint256 _voteQuorum,
@@ -81,6 +89,12 @@ contract PLCR is AragonApp, IVoting {
         revealDuration = _revealDuration;
     }
 
+    /**
+     * @notice Create a new vote about "`_metadata`"
+     * @param _script EVM script to be executed on approval
+     * @param _metadata Vote metadata
+     * @return voteId Id for newly created vote
+     */
     function newVote(bytes _script, string _metadata) isInitialized external auth(CREATE_VOTE_ROLE) returns (uint256 voteId) {
         voteId = votes.length++;
 
@@ -93,6 +107,12 @@ contract PLCR is AragonApp, IVoting {
         return voteId;
     }
 
+    /**
+     * @notice Commit to vote `_voteId` using lock with id `_lockId` for option contained in hash `_secretHash`
+     * @param _voteId Id of the Vote
+     * @param _secretHash Hash obtained from own salt and voting option
+     * @param _lockId Id of the lock from Staking app used for this vote
+     */
     function commitVote(uint256 _voteId, bytes32 _secretHash, uint256 _lockId) isInitialized public {
         Vote storage vote = votes[_voteId];
 
@@ -119,6 +139,12 @@ contract PLCR is AragonApp, IVoting {
         CommitedVote(_voteId, msg.sender, stake, _secretHash);
     }
 
+    /**
+     * @notice Reveal option `_voteOption` for Vote `_voteId` with salt `_salt`
+     * @param _voteId Id of the Vote
+     * @param _voteOption Option that was preciously commited for
+     * @param _salt Salt used in previous vote commit
+     */
     function revealVote(uint256 _voteId, bool _voteOption, bytes32 _salt) isInitialized public {
         Vote storage vote = votes[_voteId];
         UserVote storage userVote = votes[_voteId].userVotes[msg.sender];
@@ -151,6 +177,10 @@ contract PLCR is AragonApp, IVoting {
         RevealedVote(_voteId, msg.sender, userVote.stake, _voteOption);
     }
 
+    /**
+     * @notice Claim tokens for vote `_voteid`
+     * @param _voteId Id of the Vote
+     */
     function claimTokens(uint256 _voteId) isInitialized public {
         // check Vote is over
         require(isClosed(_voteId));
@@ -180,6 +210,20 @@ contract PLCR is AragonApp, IVoting {
         ClaimedTokens(_voteId, msg.sender);
     }
 
+    /**
+     * @notice Get vote details for Vote `_voteId`
+     * @param _voteId Id of the Vote
+     * @return commitEndDate End of commit period
+     * @return revealEndDate End of reveal period
+     * @return result Vote result
+     * @return computed Whether Vote result has been already computed
+     * @return metadata Vote metadata
+     * @return votesFor Amount of positive votes
+     * @return votesAgainst Amount of negative votes
+     * @return totalVotes Total amount of cast votes
+     * @return slashPool Amount of tokens to be redristibuted from winning side to losing one
+     * @return paidReward Amount of tokens that have been redistributed so far
+     */
     function getVote(
         uint256 _voteId
     )
@@ -211,6 +255,17 @@ contract PLCR is AragonApp, IVoting {
         paidReward = vote.paidReward;
     }
 
+    /**
+     * @notice Get details for Vote `_voteId` and voter `_voter`
+     * @param _voteId Id of the Vote
+     * @param _voter Address of voter
+     * @return lockId Id of lock in Staking app used for voting
+     * @return stake Amount staked for this Vote
+     * @return secretHash Hash obtained from own salt and voting option
+     * @return revealed Whether the voting option has already been revealed by voter
+     * @return voteOption Cast vote option
+     * @return claimed Whether the voter has already claimed the reward
+     */
     function getUserVote(
         uint256 _voteId,
         address _voter
@@ -237,10 +292,22 @@ contract PLCR is AragonApp, IVoting {
 
     // Voting interface
 
+    /**
+     * @notice Check if the Vote `_voteId` has already been closed.
+     * @param _voteId Id of the Vote
+     * @return Boolean indicating whether the Vote has been closed
+     */
     function isClosed(uint256 _voteId) view public returns (bool) {
         return getTimestamp() > votes[_voteId].revealEndDate;
     }
 
+    /**
+     * @notice Get vote result for Vote `_voteId`
+     * @param _voteId Id of the Vote
+     * @return result Vote result
+     * @return winningStake Total amount of tokens on the winning side
+     * @return totalStake Total amount of tokens that participated in the Vote
+     */
     function getVoteResult(uint256 _voteId) public returns (bool result, uint256 winningStake, uint256 totalStake) {
         if (!isClosed(_voteId)) {
             return (false, 0, 0);
@@ -257,6 +324,12 @@ contract PLCR is AragonApp, IVoting {
         totalStake = vote.totalVotes;
     }
 
+    /**
+     * @notice Get stake for Vote `_voteId` used by voter `_voter`
+     * @param _voteId Id of the Vote
+     * @param _voter Address of voter
+     * @return Stake used by boter in this Vote
+     */
     function getVoterWinningStake(uint256 _voteId, address _voter) public returns (uint256) {
         UserVote storage userVote = votes[_voteId].userVotes[_voter];
 
