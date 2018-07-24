@@ -59,8 +59,9 @@ contract('PLCR', ([owner, voter1, voter2, _]) => {
     const commitVote = async (voter, voteOption) => {
       const voteId = await createVote()
       // mock lock
-      const endLock = (await app.getTimestampExt.call()).add(commitDuration + revealDuration + 1)
-      await staking.setLock(stake, TIME_UNIT_SECONDS, endLock, app.address, "")
+      const startLock = await app.getTimestampExt.call()
+      const endLock = startLock.add(commitDuration + revealDuration + 1)
+      await staking.setLock(stake, TIME_UNIT_SECONDS, startLock, endLock, app.address, "")
 
       const receipt = await app.commitVote(voteId, secretHash(voteOption), lockId, { from: voter })
 
@@ -78,23 +79,25 @@ contract('PLCR', ([owner, voter1, voter2, _]) => {
     }
 
     // checks if a lockId for a given account was unlocked
-    const checkUnlocked = (_receipt, _account, _lockId) => {
+    const checkUnlocked = (_receipt, _account, _unlocker, _lockId) => {
       const logs = _receipt.receipt.logs.filter(
         l =>
-          l.topics[0] == web3.sha3('Unlock(address,uint256)') &&
+          l.topics[0] == web3.sha3('Unlocked(address,address,uint256)') &&
           '0x' + l.topics[1].slice(26) == _account &&
-          web3.toDecimal(l.topics[2]) == _lockId
+          '0x' + l.topics[2].slice(26) == _unlocker &&
+          web3.toDecimal(l.topics[3]) == _lockId
       )
       return logs.length == 1
     }
 
     // checks if a lockId for a given account was partially unlocked for certain amount
-    const checkUnlockedPartial = (_receipt, _account, _lockId, _amount) => {
+    const checkUnlockedPartial = (_receipt, _account, _unlocker, _lockId, _amount) => {
       const logs = _receipt.receipt.logs.filter(
         l =>
-          l.topics[0] == web3.sha3('UnlockPartial(address,uint256,uint256)') &&
+          l.topics[0] == web3.sha3('UnlockedPartial(address,address,uint256,uint256)') &&
           '0x' + l.topics[1].slice(26) == _account &&
-          web3.toDecimal(l.topics[2]) == _lockId &&
+          '0x' + l.topics[2].slice(26) == _unlocker &&
+          web3.toDecimal(l.topics[3]) == _lockId &&
           web3.toDecimal(l.data) == _amount
       )
       return logs.length == 1
@@ -138,7 +141,7 @@ contract('PLCR', ([owner, voter1, voter2, _]) => {
       const {voteId, receipt} = await commitVote(voter1, voteOption)
       // checks
       const slashPool = minorityBlocSlash.mul(stake).dividedToIntegerBy(pct16(100))
-      assert.isTrue(checkUnlockedPartial(receipt, voter1, lockId, slashPool))
+      assert.isTrue(checkUnlockedPartial(receipt, voter1, app.address, lockId, slashPool))
       assert.isTrue(checkMovedTokens(receipt, voter1, app.address, slashPool))
       const userVote = await app.getUserVote.call(voteId, voter1)
       assert.equal(userVote[0].toString(), lockId, "lockId should match")
@@ -160,7 +163,7 @@ contract('PLCR', ([owner, voter1, voter2, _]) => {
       const {voteId, receipt} = await commitVote(voter1, voteOption)
       // checks
       const slashPool = minorityBlocSlash.mul(stake).dividedToIntegerBy(pct16(100))
-      assert.isTrue(checkUnlockedPartial(receipt, voter1, lockId, slashPool))
+      assert.isTrue(checkUnlockedPartial(receipt, voter1, app.address, lockId, slashPool))
       assert.isTrue(checkMovedTokens(receipt, voter1, app.address, slashPool))
       const userVote = await app.getUserVote.call(voteId, voter1)
       assert.equal(userVote[0].toString(), lockId, "lockId should match")
@@ -180,8 +183,9 @@ contract('PLCR', ([owner, voter1, voter2, _]) => {
     it('fails if trying to commit after commit period', async () => {
       const voteId = await createVote()
       // mock lock
-      const endLock = (await app.getTimestampExt.call()).add(commitDuration + revealDuration + 1)
-      await staking.setLock(stake, TIME_UNIT_SECONDS, endLock, app.address, "")
+      const startLock = await app.getTimestampExt.call()
+      const endLock = startLock.add(commitDuration + revealDuration + 1)
+      await staking.setLock(stake, TIME_UNIT_SECONDS, startLock, endLock, app.address, "")
 
       await app.addTime(commitDuration + 1)
 
@@ -193,8 +197,9 @@ contract('PLCR', ([owner, voter1, voter2, _]) => {
     it('fails if lock has wrong unlocker', async () => {
       const voteId = await createVote()
       // mock lock
-      const endLock = (await app.getTimestampExt.call()).add(commitDuration + revealDuration + 1)
-      await staking.setLock(stake, TIME_UNIT_SECONDS, endLock, owner, "")
+      const startLock = await app.getTimestampExt.call()
+      const endLock = startLock.add(commitDuration + revealDuration + 1)
+      await staking.setLock(stake, TIME_UNIT_SECONDS, startLock, endLock, owner, "")
 
       return assertRevert(async () => {
         await app.commitVote(voteId, secretHash(true), lockId, { from: voter1 })
@@ -204,8 +209,9 @@ contract('PLCR', ([owner, voter1, voter2, _]) => {
     it('fails if lock has wrong unit', async () => {
       const voteId = await createVote()
       // mock lock
-      const endLock = (await app.getTimestampExt.call()).add(commitDuration + revealDuration + 1)
-      await staking.setLock(stake, TIME_UNIT_BLOCKS, endLock, app.address, "")
+      const startLock = await app.getTimestampExt.call()
+      const endLock = startLock.add(commitDuration + revealDuration + 1)
+      await staking.setLock(stake, TIME_UNIT_BLOCKS, startLock, endLock, app.address, "")
 
       return assertRevert(async () => {
         await app.commitVote(voteId, secretHash(true), lockId, { from: voter1 })
@@ -215,8 +221,9 @@ contract('PLCR', ([owner, voter1, voter2, _]) => {
     it('fails if lock has wrong end date', async () => {
       const voteId = await createVote()
       // mock lock
-      const endLock = await app.getTimestampExt.call()
-      await staking.setLock(stake, TIME_UNIT_SECONDS, endLock, app.address, "")
+      const startLock = await app.getTimestampExt.call()
+      const endLock = startLock
+      await staking.setLock(stake, TIME_UNIT_SECONDS, startLock, endLock, app.address, "")
 
       return assertRevert(async () => {
         await app.commitVote(voteId, secretHash(true), lockId, { from: voter1 })
@@ -226,8 +233,9 @@ contract('PLCR', ([owner, voter1, voter2, _]) => {
     it('fails if lock was already used', async () => {
       const voteId = await createVote()
       // mock lock
-      const endLock = (await app.getTimestampExt.call()).add(commitDuration + revealDuration + 1)
-      await staking.setLock(stake, TIME_UNIT_SECONDS, endLock, app.address, "")
+      const startLock = await app.getTimestampExt.call()
+      const endLock = startLock.add(commitDuration + revealDuration + 1)
+      await staking.setLock(stake, TIME_UNIT_SECONDS, startLock, endLock, app.address, "")
       await app.commitVote(voteId, secretHash(true), lockId, { from: voter1 })
 
       return assertRevert(async () => {
@@ -328,12 +336,13 @@ contract('PLCR', ([owner, voter1, voter2, _]) => {
       // commit vote
       // Voter 1
       // mock lock
-      const endLock = (await app.getTimestampExt.call()).add(commitDuration + revealDuration + 1)
-      await staking.setLock(stake1, TIME_UNIT_SECONDS, endLock, app.address, "")
+      const startLock = await app.getTimestampExt.call()
+      const endLock = startLock.add(commitDuration + revealDuration + 1)
+      await staking.setLock(stake1, TIME_UNIT_SECONDS, startLock, endLock, app.address, "")
       await app.commitVote(voteId, secretHash(voteOption1), lockId1, { from: voter1 })
       // Voter 2
       // mock lock
-      await staking.setLock(stake2, TIME_UNIT_SECONDS, endLock, app.address, "")
+      await staking.setLock(stake2, TIME_UNIT_SECONDS, startLock, endLock, app.address, "")
       await app.commitVote(voteId, secretHash(voteOption2), lockId2, { from: voter2 })
 
       // Reveal votes
@@ -490,12 +499,13 @@ contract('PLCR', ([owner, voter1, voter2, _]) => {
       // commit vote
       // Voter 1
       // mock lock
-      const endLock = (await app.getTimestampExt.call()).add(commitDuration + revealDuration + 1)
-      await staking.setLock(stake1, TIME_UNIT_SECONDS, endLock, app.address, "")
+      const startLock = await app.getTimestampExt.call()
+      const endLock = startLock.add(commitDuration + revealDuration + 1)
+      await staking.setLock(stake1, TIME_UNIT_SECONDS, startLock, endLock, app.address, "")
       await app.commitVote(voteId, secretHash(voteOption1), lockId1, { from: voter1 })
       // Voter 2
       // mock lock
-      await staking.setLock(stake2, TIME_UNIT_SECONDS, endLock, app.address, "")
+      await staking.setLock(stake2, TIME_UNIT_SECONDS, startLock, endLock, app.address, "")
       await app.commitVote(voteId, secretHash(voteOption2), lockId2, { from: voter2 })
 
       // Reveal votes

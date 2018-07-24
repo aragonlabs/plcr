@@ -120,11 +120,11 @@ contract PLCR is AragonApp, IVoting {
         require(getTimestamp() <= vote.commitEndDate);
 
         // check lock and get amount
-        uint256 stake = checkLock(msg.sender, _lockId, vote.revealEndDate);
+        uint256 stake = checkLock(msg.sender, _lockId, vote.commitEndDate, vote.revealEndDate);
 
         // move slash proportion to here
         uint256 slashStake = stake.mul(minorityBlocSlash) / PCT_BASE;
-        staking.unlockAndMoveTokens(msg.sender, _lockId, address(this), slashStake);
+        staking.unlockPartialAndMoveTokens(msg.sender, _lockId, address(this), slashStake);
         vote.slashPool = vote.slashPool.add(slashStake);
 
         vote.userVotes[msg.sender] = UserVote({
@@ -154,7 +154,7 @@ contract PLCR is AragonApp, IVoting {
         require(getTimestamp() <= vote.revealEndDate);
 
         // check salt
-        require(userVote.secretHash == keccak256(keccak256(_voteOption ? '1' : '0'), keccak256(_salt)));
+        require(userVote.secretHash == keccak256(keccak256(_voteOption ? "1" : "0"), keccak256(_salt)));
 
         // make sure it's not revealed twice
         require(!userVote.revealed);
@@ -352,7 +352,7 @@ contract PLCR is AragonApp, IVoting {
         return 0;
     }
 
-    function checkLock(address user, uint256 _lockId, uint64 _date) internal returns (uint256) {
+    function checkLock(address user, uint256 _lockId, uint64 _startDate, uint64 _endDate) internal returns (uint256) {
         // check lockId was not used before
         require(!usedLocks[user][_lockId]);
         // mark it as used
@@ -361,14 +361,16 @@ contract PLCR is AragonApp, IVoting {
         // get the lock
         uint256 amount;
         uint8 lockUnit;
+        uint64 lockStarts;
         uint64 lockEnds;
         address unlocker;
-        (amount, lockUnit, lockEnds, unlocker, ) = staking.getLock(msg.sender, _lockId);
+        (amount, lockUnit, lockStarts, lockEnds, unlocker, ) = staking.getLock(msg.sender, _lockId);
         // check unlocker
         require(unlocker == address(this));
         // check time
         require(lockUnit == uint8(TimeUnit.Seconds));
-        require(lockEnds >= _date);
+        require(lockStarts <= _startDate);
+        require(lockEnds >= _endDate);
 
         return amount;
     }
