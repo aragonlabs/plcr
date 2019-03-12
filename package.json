@@ -30,10 +30,10 @@
     "solidity-coverage": "0.4.3",
     "solidity-sha3": "^0.4.1",
     "solium": "^1.0.4",
-    "truffle": "4.0.5",
+    "truffle": "4.1.14",
     "truffle-hdwallet-provider": "0.0.3"
   },
   "dependencies": {
-    "@aragon/os": "^3.1.2"
+    "@aragon/os": "^4.0.1"
   }
 }

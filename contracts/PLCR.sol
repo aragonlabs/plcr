@@ -1,11 +1,11 @@
-pragma solidity 0.4.18;
+pragma solidity 0.4.24;
 
 import "@aragon/os/contracts/apps/AragonApp.sol";
 import "@aragon/os/contracts/lib/misc/Migrations.sol";
-import "@aragon/os/contracts/lib/zeppelin/math/SafeMath.sol";
-import "@aragon/os/contracts/lib/zeppelin/math/SafeMath64.sol";
+import "@aragon/os/contracts/lib/math/SafeMath.sol";
+import "@aragon/os/contracts/lib/math/SafeMath64.sol";
 
-import "@aragon/apps-staking/contracts/interfaces/IStaking.sol"; // TODO: unifiy with Curation somewhere
+import "staking/contracts/IStakingLocking.sol"; // TODO: unifiy with Curation somewhere
 import "@aragon/apps-curation/contracts/interfaces/IVoting.sol"; // TODO: unifiy with Curation somewhere
 
 
@@ -13,7 +13,7 @@ contract PLCR is AragonApp, IVoting {
     using SafeMath for uint256;
     using SafeMath64 for uint64;
 
-    IStaking public staking;
+    IStakingLocking public staking;
     uint256 public voteQuorum;
     uint256 public minorityBlocSlash;
     uint64 public commitDuration;
@@ -22,9 +22,6 @@ contract PLCR is AragonApp, IVoting {
     uint256 constant public PCT_BASE = 10 ** 18; // 0% = 0; 1% = 10^16; 100% = 10^18
 
     bytes32 constant public CREATE_VOTE_ROLE = keccak256("CREATE_VOTE_ROLE");
-
-    // TODO!!!
-    enum TimeUnit { Blocks, Seconds }
 
     struct UserVote {
         uint256 lockId;
@@ -67,7 +64,7 @@ contract PLCR is AragonApp, IVoting {
      * @param _revealDuration Duration in seconds of the Reveal period
      */
     function initialize(
-        IStaking _staking,
+        IStakingLocking _staking,
         uint256 _voteQuorum,
         uint256 _minorityBlocSlash,
         uint64 _commitDuration,
@@ -99,11 +96,11 @@ contract PLCR is AragonApp, IVoting {
         voteId = votes.length++;
 
         Vote storage vote = votes[voteId];
-        vote.commitEndDate = getTimestamp().add(commitDuration);
+        vote.commitEndDate = getTimestamp64().add(commitDuration);
         vote.revealEndDate = vote.commitEndDate.add(revealDuration);
         vote.metadata = _metadata;
 
-        NewVote(voteId);
+        emit NewVote(voteId);
         return voteId;
     }
 
@@ -117,14 +114,14 @@ contract PLCR is AragonApp, IVoting {
         Vote storage vote = votes[_voteId];
 
         // check commit period for Vote
-        require(getTimestamp() <= vote.commitEndDate);
+        require(getTimestamp64() <= vote.commitEndDate);
 
         // check lock and get amount
-        uint256 stake = checkLock(msg.sender, _lockId, vote.commitEndDate, vote.revealEndDate);
+        uint256 stake = checkLock(msg.sender, _lockId, vote.revealEndDate);
 
         // move slash proportion to here
         uint256 slashStake = stake.mul(minorityBlocSlash) / PCT_BASE;
-        staking.unlockPartialAndMoveTokens(msg.sender, _lockId, address(this), slashStake);
+        staking.transferFromLock(msg.sender, _lockId, slashStake, address(this), 0);
         vote.slashPool = vote.slashPool.add(slashStake);
 
         vote.userVotes[msg.sender] = UserVote({
@@ -136,7 +133,7 @@ contract PLCR is AragonApp, IVoting {
             claimed: false
         });
 
-        CommitedVote(_voteId, msg.sender, stake, _secretHash);
+        emit CommitedVote(_voteId, msg.sender, stake, _secretHash);
     }
 
     /**
@@ -150,11 +147,11 @@ contract PLCR is AragonApp, IVoting {
         UserVote storage userVote = votes[_voteId].userVotes[msg.sender];
 
         // check reveal period
-        require(vote.commitEndDate < getTimestamp());
-        require(getTimestamp() <= vote.revealEndDate);
+        require(vote.commitEndDate < getTimestamp64());
+        require(getTimestamp64() <= vote.revealEndDate);
 
         // check salt
-        require(userVote.secretHash == keccak256(keccak256(_voteOption ? "1" : "0"), keccak256(_salt)));
+        require(userVote.secretHash == keccak256(abi.encodePacked(keccak256(abi.encodePacked(_voteOption ? "1" : "0")), keccak256(abi.encodePacked(_salt)))));
 
         // make sure it's not revealed twice
         require(!userVote.revealed);
@@ -174,7 +171,7 @@ contract PLCR is AragonApp, IVoting {
         // delete used lock
         delete(usedLocks[msg.sender][userVote.lockId]);
 
-        RevealedVote(_voteId, msg.sender, userVote.stake, _voteOption);
+        emit RevealedVote(_voteId, msg.sender, userVote.stake, _voteOption);
     }
 
     /**
@@ -202,12 +199,12 @@ contract PLCR is AragonApp, IVoting {
             uint256 winningVotes = vote.result ? vote.votesFor : vote.votesAgainst;
             uint256 amount = vote.slashPool.mul(userVote.stake) / winningVotes;
             // move tokens from Voting to voter
-            staking.moveTokens(address(this), msg.sender, amount);
+            staking.transfer(amount, msg.sender, 0);
             // keep track of paid rewards
             vote.paidReward = vote.paidReward.add(amount);
         }
 
-        ClaimedTokens(_voteId, msg.sender);
+        emit ClaimedTokens(_voteId, msg.sender);
     }
 
     /**
@@ -298,7 +295,7 @@ contract PLCR is AragonApp, IVoting {
      * @return Boolean indicating whether the Vote has been closed
      */
     function isClosed(uint256 _voteId) view public returns (bool) {
-        return getTimestamp() > votes[_voteId].revealEndDate;
+        return getTimestamp64() > votes[_voteId].revealEndDate;
     }
 
     /**
@@ -352,7 +349,7 @@ contract PLCR is AragonApp, IVoting {
         return 0;
     }
 
-    function checkLock(address user, uint256 _lockId, uint64 _startDate, uint64 _endDate) internal returns (uint256) {
+    function checkLock(address user, uint256 _lockId, uint64 _endDate) internal returns (uint256) {
         // check lockId was not used before
         require(!usedLocks[user][_lockId]);
         // mark it as used
@@ -360,17 +357,13 @@ contract PLCR is AragonApp, IVoting {
 
         // get the lock
         uint256 amount;
-        uint8 lockUnit;
-        uint64 lockStarts;
-        uint64 lockEnds;
+        uint64 unlockedAt;
         address unlocker;
-        (amount, lockUnit, lockStarts, lockEnds, unlocker, ) = staking.getLock(msg.sender, _lockId);
+        (amount, unlockedAt, unlocker, ) = staking.getLock(msg.sender, _lockId);
         // check unlocker
         require(unlocker == address(this));
         // check time
-        require(lockUnit == uint8(TimeUnit.Seconds));
-        require(lockStarts <= _startDate);
-        require(lockEnds >= _endDate);
+        require(unlockedAt >= _endDate);
 
         return amount;
     }
@@ -390,9 +383,5 @@ contract PLCR is AragonApp, IVoting {
         }
 
         vote.computed = true;
-    }
-
-    function getTimestamp() view internal returns (uint64) {
-        return uint64(now);
     }
 }
